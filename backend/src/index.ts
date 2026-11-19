@@ -1,42 +1,33 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import { initDb } from './db';
+import { createApp, createContext, seed } from './app.js';
+import { env } from './config/env.js';
+import { logger } from './lib/logger.js';
+import { expireStaleOrders } from './services/orders.js';
 
-dotenv.config();
+async function main() {
+  const ctx = await createContext();
+  if (env.SEED_DEMO_DATA) await seed(ctx);
 
-const app = express();
-const port = process.env.PORT || 3001;
+  const app = createApp(ctx);
+  const server = app.listen(env.PORT, () => {
+    logger.info({ port: env.PORT, db: ctx.db.kind, payments: ctx.payments.mode }, `AgentBridge API listening on ${env.PUBLIC_API_URL}`);
+  });
 
-app.use(cors());
-app.use(express.json());
+  const sweeper = setInterval(() => {
+    expireStaleOrders(ctx).catch((err) => logger.error({ err }, 'expiry sweep failed'));
+  }, 60_000);
 
-// Initialize Database
-initDb();
+  const shutdown = async (signal: string) => {
+    logger.info({ signal }, 'shutting down');
+    clearInterval(sweeper);
+    server.close();
+    await ctx.db.close();
+    process.exit(0);
+  };
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+}
 
-// Routes
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-import { catalogRoutes } from './adapter-core';
-import { acpRoutes } from './acp-server';
-import { ap2Routes } from './ap2-layer';
-import { trustRoutes } from './trust-layer';
-import { runMcpServerStdio } from './mcp-server';
-
-app.use('/catalog', catalogRoutes);
-app.use('/acp', acpRoutes);
-app.use('/ap2', ap2Routes);
-app.use('/trust', trustRoutes);
-
-app.listen(port, () => {
-  console.log(`AgentBridge Core running at http://localhost:${port}`);
-  
-  // Also start the MCP server on stdio if run in a specific mode, or we can just run it alongside.
-  // For standard HTTP REST apps, stdio might conflict with console logs, but for a demo it's fine 
-  // to initialize it if we start the server with a specific flag.
-  if (process.env.START_MCP === 'true') {
-    runMcpServerStdio().catch(console.error);
-  }
+main().catch((err) => {
+  logger.fatal({ err }, 'failed to start');
+  process.exit(1);
 });
