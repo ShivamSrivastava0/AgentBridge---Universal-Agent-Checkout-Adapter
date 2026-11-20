@@ -1,8 +1,10 @@
 'use client';
 
+import { CircleCheck, CircleX, ScanEye } from 'lucide-react';
 import { useState } from 'react';
 import { admin, ApiError } from '@/lib/api';
 
+/** Approve / reject controls for an order held by the risk checks. */
 export function ReviewBar({ id, onDone }: { id: string; onDone: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -19,17 +21,21 @@ export function ReviewBar({ id, onDone }: { id: string; onDone: () => void }) {
     }
   };
   return (
-    <div className="alert alert-bad">
-      <div>
-        <strong>Held for fraud review.</strong> Approve to continue the checkout, or reject to cancel it and release stock.
-        {err && <span className="error-text"> {err}</span>}
+    <div className="review-bar">
+      <span className="review-icon">
+        <ScanEye size={20} />
+      </span>
+      <div className="review-text">
+        <strong>Your call</strong>
+        <span>Approve to let the checkout continue, or reject to cancel it and put the stock back.</span>
+        {err && <span className="text-bad">{err}</span>}
       </div>
       <div className="row">
-        <button className="btn btn-sm btn-danger" disabled={!!busy} onClick={() => act('reject')}>
-          {busy === 'reject' ? 'Rejecting…' : 'Reject'}
+        <button className="btn btn-danger" disabled={!!busy} onClick={() => act('reject')}>
+          <CircleX size={16} /> {busy === 'reject' ? 'Rejecting…' : 'Reject'}
         </button>
-        <button className="btn btn-sm btn-primary" disabled={!!busy} onClick={() => act('approve')}>
-          {busy === 'approve' ? 'Approving…' : 'Approve'}
+        <button className="btn btn-primary" disabled={!!busy} onClick={() => act('approve')}>
+          <CircleCheck size={16} /> {busy === 'approve' ? 'Approving…' : 'Approve'}
         </button>
       </div>
     </div>

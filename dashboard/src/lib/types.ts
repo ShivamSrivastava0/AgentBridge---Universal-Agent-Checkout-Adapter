@@ -145,6 +145,7 @@ export interface Stats {
   };
   by_protocol: { protocol: Protocol; orders: number; paid_volume_paise: number }[];
   by_outcome: { outcome: string; orders: number }[];
+  by_status: Partial<Record<OrderStatus, number>>;
   daily: { day: string; orders: number; paid_volume_paise: number }[];
   top_rules: { rule: string; hits: number }[];
   low_stock: { id: string; name: string; stock: number }[];

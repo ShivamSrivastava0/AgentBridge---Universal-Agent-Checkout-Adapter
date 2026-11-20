@@ -1,102 +1,100 @@
 'use client';
 
+import { AnimatePresence, motion } from 'motion/react';
+import { ChevronRight, Receipt, Search } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { EmptyState, ErrorState, PageHeader, ProtocolTag, Skeleton, StatusBadge } from '@/components/ui';
+import { AgentAvatar, StatusPill } from '@/components/icons';
+import { EmptyState, ErrorState, PageHeader, Skeleton, Tabs } from '@/components/ui';
 import { useAdmin, useLiveReload } from '@/lib/api';
-import { STATUS_META, formatPaise, timeAgo, type OrderStatus } from '@/lib/format';
-import type { OrderListItem } from '@/lib/types';
+import { formatPaise, timeAgo, type OrderStatus } from '@/lib/format';
+import type { OrderListItem, Stats } from '@/lib/types';
 
-const FILTERS: (OrderStatus | 'all')[] = ['all', 'paid', 'pending_approval', 'in_review', 'awaiting_payment', 'blocked', 'rejected', 'expired'];
+type Filter = 'all' | 'attention' | OrderStatus;
+
+const FILTERS: { value: Filter; label: string; statuses?: OrderStatus[] }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'attention', label: 'Needs a decision', statuses: ['in_review', 'pending_approval'] },
+  { value: 'paid', label: 'Paid', statuses: ['paid'] },
+  { value: 'awaiting_payment', label: 'Awaiting payment', statuses: ['awaiting_payment'] },
+  { value: 'blocked', label: 'Blocked', statuses: ['blocked'] },
+  { value: 'rejected', label: 'Rejected / expired', statuses: ['rejected', 'expired', 'cancelled'] },
+];
 
 export default function OrdersPage() {
-  const router = useRouter();
-  const [status, setStatus] = useState<OrderStatus | 'all'>('all');
+  const [filter, setFilter] = useState<Filter>('all');
   const [protocol, setProtocol] = useState('');
   const [q, setQ] = useState('');
-  const params = new URLSearchParams({ limit: '100' });
-  if (status !== 'all') params.set('status', status);
-  if (protocol) params.set('protocol', protocol);
-  if (q.trim()) params.set('q', q.trim());
-  const { data, error, loading, reload } = useAdmin<{ orders: OrderListItem[] }>(`/orders?${params}`);
-  useLiveReload(reload);
+  const stats = useAdmin<Stats>('/stats');
+  const { data, error, reload } = useAdmin<{ orders: OrderListItem[] }>(`/orders?limit=200${protocol ? `&protocol=${protocol}` : ''}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ''}`);
+  useLiveReload(() => {
+    reload();
+    stats.reload();
+  });
+
+  const active = FILTERS.find((f) => f.value === filter)!;
+  const rows = (data?.orders ?? []).filter((o) => !active.statuses || active.statuses.includes(o.status));
+  const count = (f: (typeof FILTERS)[number]) =>
+    f.statuses ? f.statuses.reduce((n, st) => n + (stats.data?.by_status[st] ?? 0), 0) : stats.data?.totals.orders;
 
   return (
     <>
-      <PageHeader kicker="ACTIVITY" title="Orders" description="Every checkout from every agent, with the policy decision that shaped it." />
+      <PageHeader icon={Receipt} title="Orders" description="Every purchase an AI agent tried to make at your store, and what happened to it." />
 
       <div className="toolbar">
-        <div className="tabs" role="tablist" aria-label="Filter by status">
-          {FILTERS.map((f) => (
-            <button key={f} role="tab" aria-selected={status === f} className={`tab ${status === f ? 'active' : ''}`} onClick={() => setStatus(f)}>
-              {f === 'all' ? 'All' : STATUS_META[f].label}
-            </button>
-          ))}
-        </div>
+        <Tabs label="Filter orders" value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ value: f.value, label: f.label, count: count(f) }))} />
         <div className="toolbar-right">
-          <select className="input input-sm" value={protocol} onChange={(e) => setProtocol(e.target.value)} aria-label="Filter by protocol">
-            <option value="">All protocols</option>
-            <option value="acp">ACP · ChatGPT</option>
-            <option value="mcp">MCP · Claude</option>
-            <option value="ap2">AP2 · Gemini</option>
+          <select className="input" value={protocol} onChange={(e) => setProtocol(e.target.value)} aria-label="Filter by AI assistant">
+            <option value="">All assistants</option>
+            <option value="mcp">Claude</option>
+            <option value="acp">ChatGPT</option>
+            <option value="ap2">Gemini</option>
           </select>
-          <label className="search-box">
-            <span className="search-icon" aria-hidden="true" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order id or agent" aria-label="Search orders" />
+          <label className="search">
+            <Search size={16} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search order or agent" aria-label="Search orders" />
           </label>
         </div>
       </div>
 
       {error && <ErrorState error={error} onRetry={reload} />}
-      <section className="section-block">
-        <div className="table-frame">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th scope="col">Order</th>
-                <th scope="col">Agent</th>
-                <th scope="col">Decision</th>
-                <th scope="col" className="num">
-                  Total
-                </th>
-                <th scope="col">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data?.orders.map((o) => (
-                <tr key={o.id} className="clickable" onClick={() => router.push(`/orders/${o.id}`)}>
-                  <td>
-                    <Link href={`/orders/${o.id}`} className="mono strong" onClick={(e) => e.stopPropagation()}>
-                      {o.id}
-                    </Link>
-                    <span className="sub">
-                      {timeAgo(o.created_at)} · {o.item_count} item{o.item_count === 1 ? '' : 's'}
+      <section className="card">
+        {!data ? (
+          <div className="card-pad">
+            <Skeleton rows={8} height={44} />
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState title="No orders here" icon={Receipt}>
+            {filter === 'all' ? 'Orders from AI agents will show up here.' : 'Nothing matches this filter right now.'}
+          </EmptyState>
+        ) : (
+          <ul className="order-list">
+            <AnimatePresence initial={false}>
+              {rows.map((o, i) => (
+                <motion.li key={o.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: Math.min(i, 12) * 0.025 }}>
+                  <Link href={`/orders/${o.id}`} className="order-row">
+                    <AgentAvatar protocol={o.protocol} />
+                    <span className="order-main">
+                      <strong>
+                        {o.agent_name} · {o.item_count} item{o.item_count === 1 ? '' : 's'}
+                      </strong>
+                      <small>{o.summary}</small>
                     </span>
-                  </td>
-                  <td>
-                    <ProtocolTag protocol={o.protocol} /> <span className="agent-name">{o.agent_name}</span>
-                    <span className="sub">{o.mandate_label ? `Mandate: ${o.mandate_label}` : 'No mandate'}</span>
-                  </td>
-                  <td className="wrap">
-                    <span className="clamp">{o.summary}</span>
-                  </td>
-                  <td className="num mono">{formatPaise(o.total_paise)}</td>
-                  <td>
-                    <StatusBadge status={o.status} />
-                  </td>
-                </tr>
+                    <span className="order-meta">
+                      <StatusPill status={o.status} size="sm" />
+                      <small>
+                        {timeAgo(o.created_at)} · <span className="mono">{o.id.slice(0, 12)}</span>
+                      </small>
+                    </span>
+                    <span className="order-amount">{formatPaise(o.total_paise)}</span>
+                    <ChevronRight size={18} className="order-chevron" />
+                  </Link>
+                </motion.li>
               ))}
-            </tbody>
-          </table>
-          {loading && !data && (
-            <div className="card-body">
-              <Skeleton rows={6} />
-            </div>
-          )}
-          {data && data.orders.length === 0 && <EmptyState title="No orders match these filters" />}
-        </div>
-        {data && <div className="table-footer">Showing {data.orders.length} most recent</div>}
+            </AnimatePresence>
+          </ul>
+        )}
+        {data && rows.length > 0 && <div className="card-foot">Showing {rows.length} orders</div>}
       </section>
     </>
   );
