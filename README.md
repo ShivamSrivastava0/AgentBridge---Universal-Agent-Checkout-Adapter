@@ -50,7 +50,7 @@ On top of that: **new items** (never bought by this household) always need appro
 | `backend/src/db/` | Postgres layer (node-postgres or embedded PGlite), migrations, seed |
 | `backend/src/mcp-stdio.ts` | stdio ⇄ HTTP bridge so Claude Desktop can connect |
 | `backend/src/demo/claude-agent.ts` | A real Claude agent shopping over MCP |
-| `dashboard/` | Next.js merchant console, agent playground and shopper approval page |
+| `dashboard/` | Next.js merchant console (Home, Orders, Needs attention, Spending rules, Products, Try it live, Connect agents) and shopper approval page |
 
 ## Engineering details
 
@@ -80,7 +80,7 @@ npm install
 npm run dev
 ```
 
-Open the console and go to **Agent playground**. Each scenario sends a real ACP, MCP or AP2 request and shows the wire traffic and the decision:
+Open the console and go to **Try it live**. Each scenario sends a real ACP, MCP or AP2 request, animates every rule check, and shows the decision (the raw API calls are one click away):
 
 | Scenario | Protocol | Result |
 |---|---|---|
@@ -96,11 +96,11 @@ Open the console and go to **Agent playground**. Each scenario sends a real ACP,
 
 ```bash
 cd backend
-# Copy a token from Console → Mandates → "Copy token"
+# Copy a key from Console → Spending rules → "Copy key for the agent"
 ANTHROPIC_API_KEY=sk-ant-... MANDATE_TOKEN=ey... npm run demo:agent -- "Restock our usual milk and atta"
 ```
 
-Or add it to Claude Desktop with the config shown on **Console → Integrations**.
+Or add it to Claude Desktop with the config shown on **Console → Connect agents**.
 
 ### Tests
 

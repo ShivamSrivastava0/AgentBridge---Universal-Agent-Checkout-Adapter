@@ -31,6 +31,11 @@ export async function getStats(ctx: AppContext) {
     [ctx.merchantId],
   );
 
+  const byStatus = await q.query<{ status: string; orders: number }>(
+    `SELECT status, count(*)::int AS orders FROM orders WHERE merchant_id = $1 GROUP BY status`,
+    [ctx.merchantId],
+  );
+
   const byOutcome = await q.query<{ outcome: string; orders: number }>(
     `SELECT decision->>'outcome' AS outcome, count(*)::int AS orders
      FROM orders WHERE merchant_id = $1 GROUP BY 1 ORDER BY 1`,
@@ -64,6 +69,7 @@ export async function getStats(ctx: AppContext) {
     totals,
     by_protocol: byProtocol,
     by_outcome: byOutcome,
+    by_status: Object.fromEntries(byStatus.map((r) => [r.status, r.orders])),
     daily,
     top_rules: topRules,
     low_stock: lowStock,
